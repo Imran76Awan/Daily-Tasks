@@ -1,0 +1,13 @@
+$keyword = Read-Host "Enter keyword for GPO name filter"
+$gpos = Get-GPO -All
+$filteredGpos = $gpos | Where-Object {$_.DisplayName -like "*$keyword*"}
+$output = foreach ($gpo in $filteredGpos) {
+    [PSCustomObject]@{
+        DisplayName = $gpo.DisplayName
+        Owner = $gpo.Owner
+        CreationTime = $gpo.CreationTime
+        ModificationTime = $gpo.ModificationTime
+        GPOStatus = $gpo.GPOStatus
+    }
+}
+$output | Export-Csv "GPO_list_$keyword.csv" -NoTypeInformation
