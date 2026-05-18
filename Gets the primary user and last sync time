@@ -1,0 +1,102 @@
+
+#Requires -Version 5.1
+<#
+.SYNOPSIS
+    Gets the primary user and last sync time for Intune-managed devices from a CSV of hostnames.
+
+.DESCRIPTION
+    Reads device hostnames from the exportGroupMembers CSV, queries Microsoft Graph (Intune)
+    for each device's primary user and last sync time, and exports results to a CSV.
+
+.NOTES
+    Required app registration permission (least privilege, read-only):
+        DeviceManagementManagedDevices.Read.All  (Application permission)
+
+    No write permissions are needed.
+#>
+
+# â”€â”€ Config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+$tenantId   = 'Put Your Tenant ID'
+$clientId   = 'Put Your Clinet ID'
+$thumbprint = 'Put Your TumbPrint'
+
+$csvInput   = "$env:USERPROFILE\temp\exportGroupMembers_2026-5-18.csv"
+$csvOutput  = "$env:USERPROFILE\Downloads\DevicePrimaryUser_$(Get-Date -Format 'yyyy-MM-dd').csv"
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+function Ensure-Module {
+    param([string]$Name)
+    if (-not (Get-Module -ListAvailable -Name $Name)) {
+        Write-Host "Installing $Name ..." -ForegroundColor Yellow
+        Install-Module -Name $Name -Scope CurrentUser -Repository PSGallery -Force -AllowClobber
+    }
+    Import-Module $Name -ErrorAction Stop
+}
+
+Ensure-Module 'Microsoft.Graph.Authentication'
+Ensure-Module 'Microsoft.Graph.DeviceManagement'
+
+# â”€â”€ Connect (certificate, no interactive prompt) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+$cert = Get-Item "Cert:\CurrentUser\My\$thumbprint" -ErrorAction Stop
+Connect-MgGraph -TenantId $tenantId -ClientId $clientId -Certificate $cert -NoWelcome
+
+# â”€â”€ Load hostnames â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+$devices = Import-Csv -Path $csvInput | Select-Object -ExpandProperty displayName | Where-Object { $_ }
+Write-Host "Loaded $($devices.Count) hostnames from CSV."
+
+# â”€â”€ Query each device â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+$results = foreach ($hostname in $devices) {
+    Write-Host "  Querying: $hostname" -ForegroundColor Cyan
+
+    # Select only the fields we need â€” avoids pulling large payloads
+    $filter   = "deviceName eq '$hostname'"
+    $select   = 'deviceName,userDisplayName,userPrincipalName,lastSyncDateTime,operatingSystem,managedDeviceOwnerType'
+
+    try {
+        $found = Get-MgDeviceManagementManagedDevice `
+                    -Filter $filter `
+                    -Select $select `
+                    -ErrorAction Stop
+
+        if ($found) {
+            foreach ($d in $found) {
+                [PSCustomObject]@{
+                    Hostname         = $d.DeviceName
+                    PrimaryUser      = $d.UserDisplayName
+                    UserPrincipalName = $d.UserPrincipalName
+                    LastSyncTime     = $d.LastSyncDateTime
+                    OS               = $d.OperatingSystem
+                    OwnerType        = $d.ManagedDeviceOwnerType
+                    Status           = 'Found'
+                }
+            }
+        } else {
+            [PSCustomObject]@{
+                Hostname          = $hostname
+                PrimaryUser       = ''
+                UserPrincipalName = ''
+                LastSyncTime      = ''
+                OS                = ''
+                OwnerType         = ''
+                Status            = 'NotFoundInIntune'
+            }
+        }
+    }
+    catch {
+        [PSCustomObject]@{
+            Hostname          = $hostname
+            PrimaryUser       = ''
+            UserPrincipalName = ''
+            LastSyncTime      = ''
+            OS                = ''
+            OwnerType         = ''
+            Status            = "Error: $($_.Exception.Message)"
+        }
+    }
+}
+
+# â”€â”€ Export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+$results | Export-Csv -Path $csvOutput -NoTypeInformation -Encoding UTF8
+Write-Host "`nDone. Results saved to: $csvOutput" -ForegroundColor Green
+
+Disconnect-MgGraph | Out-Null
