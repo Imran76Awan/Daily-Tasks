@@ -1,0 +1,142 @@
+
+#Requires -Version 5.1
+<#
+.SYNOPSIS
+    Exports all Intune-managed Windows devices grouped by OS release, with primary
+    user and last sync time.
+
+.DESCRIPTION
+    Queries Microsoft Graph (Intune) for every managed Windows device, resolves the
+    Windows release from the OS build number, and exports a CSV containing:
+        Hostname | PrimaryUser | UPN | LastSyncTime | OSVersion | WindowsRelease | OwnerType
+
+    Windows build â†’ release mapping used:
+        10.0.10240   Windows 10 1507
+        10.0.10586   Windows 10 1511
+        10.0.14393   Windows 10 1607
+        10.0.15063   Windows 10 1703
+        10.0.16299   Windows 10 1709
+        10.0.17134   Windows 10 1803
+        10.0.17763   Windows 10 1809
+        10.0.18362   Windows 10 1903
+        10.0.18363   Windows 10 1909
+        10.0.19041   Windows 10 2004
+        10.0.19042   Windows 10 20H2
+        10.0.19043   Windows 10 21H1
+        10.0.19044   Windows 10 21H2
+        10.0.19045   Windows 10 22H2   â† current Win10 LTSC/mainstream
+        10.0.22000   Windows 11 21H2
+        10.0.22621   Windows 11 22H2
+        10.0.22631   Windows 11 23H2
+        10.0.26100   Windows 11 24H2
+        10.0.26200   Windows 11 25H2
+
+.NOTES
+    Required app-registration permission (read-only):
+        DeviceManagementManagedDevices.Read.All  (Application)
+#>
+
+# â”€â”€ Config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+$tenantId   = 'PUT YOUR tenantId'
+$clientId   = 'PUT YOUR clientId'
+$thumbprint = 'PUT YOUR thumbprint'
+
+$csvOutput  = "C:\Temp\WindowsDevices_ByOSVersion_$(Get-Date -Format 'yyyy-MM-dd').csv"
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+# Build â†’ friendly release name
+$buildMap = [ordered]@{
+    '10.0.26200' = 'Windows 11 25H2'
+    '10.0.26100' = 'Windows 11 24H2'
+    '10.0.22631' = 'Windows 11 23H2'
+    '10.0.22621' = 'Windows 11 22H2'
+    '10.0.22000' = 'Windows 11 21H2'
+    '10.0.19045' = 'Windows 10 22H2'
+    '10.0.19044' = 'Windows 10 21H2'
+    '10.0.19043' = 'Windows 10 21H1'
+    '10.0.19042' = 'Windows 10 20H2'
+    '10.0.19041' = 'Windows 10 2004'
+    '10.0.18363' = 'Windows 10 1909'
+    '10.0.18362' = 'Windows 10 1903'
+    '10.0.17763' = 'Windows 10 1809'
+    '10.0.17134' = 'Windows 10 1803'
+    '10.0.16299' = 'Windows 10 1709'
+    '10.0.15063' = 'Windows 10 1703'
+    '10.0.14393' = 'Windows 10 1607'
+    '10.0.10586' = 'Windows 10 1511'
+    '10.0.10240' = 'Windows 10 1507'
+}
+
+function Resolve-WindowsRelease {
+    param([string]$OsVersion)
+    # osVersion from Intune looks like "10.0.22631.4751" â€“ match on the first three octets
+    if ([string]::IsNullOrWhiteSpace($OsVersion)) { return 'Unknown' }
+    $prefix = ($OsVersion -split '\.' | Select-Object -First 3) -join '.'
+    if ($buildMap.Contains($prefix)) { return $buildMap[$prefix] }
+    # Fallback: still label Win10 vs Win11 by major build range
+    $build = [int](($OsVersion -split '\.')[2])
+    if ($build -ge 22000) { return "Windows 11 (build $build)" }
+    if ($build -ge 10240) { return "Windows 10 (build $build)" }
+    return "Other Windows (build $build)"
+}
+
+function Ensure-Module {
+    param([string]$Name)
+    if (-not (Get-Module -ListAvailable -Name $Name)) {
+        Write-Host "Installing $Name ..." -ForegroundColor Yellow
+        Install-Module -Name $Name -Scope CurrentUser -Repository PSGallery -Force -AllowClobber
+    }
+    Import-Module $Name -ErrorAction Stop
+}
+
+Ensure-Module 'Microsoft.Graph.Authentication'
+Ensure-Module 'Microsoft.Graph.DeviceManagement'
+
+# â”€â”€ Connect (certificate, no interactive prompt) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+$cert = Get-Item "Cert:\CurrentUser\My\$thumbprint" -ErrorAction Stop
+Connect-MgGraph -TenantId $tenantId -ClientId $clientId -Certificate $cert -NoWelcome
+
+# â”€â”€ Query ALL managed Windows devices (pages automatically with -All) â”€â”€â”€â”€â”€â”€â”€â”€â”€
+Write-Host "Querying all managed Windows devices from Intune..." -ForegroundColor Cyan
+
+$select = 'id,deviceName,userDisplayName,userPrincipalName,lastSyncDateTime,' +
+          'operatingSystem,osVersion,managedDeviceOwnerType'
+
+$allDevices = Get-MgDeviceManagementManagedDevice `
+                -Filter "operatingSystem eq 'Windows'" `
+                -Select $select `
+                -All `
+                -ErrorAction Stop
+
+Write-Host "Retrieved $($allDevices.Count) Windows devices." -ForegroundColor Green
+
+# â”€â”€ Build result objects â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+$results = foreach ($d in $allDevices) {
+    $release = Resolve-WindowsRelease -OsVersion $d.OsVersion
+
+    [PSCustomObject]@{
+        Hostname          = $d.DeviceName
+        PrimaryUser       = $d.UserDisplayName
+        UserPrincipalName = $d.UserPrincipalName
+        LastSyncTime      = $d.LastSyncDateTime
+        OSVersion         = $d.OsVersion
+        WindowsRelease    = $release
+        OwnerType         = $d.ManagedDeviceOwnerType
+    }
+}
+
+# â”€â”€ Summary breakdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+Write-Host "`nOS Release breakdown:" -ForegroundColor Yellow
+$results |
+    Group-Object WindowsRelease |
+    Sort-Object Name |
+    ForEach-Object { Write-Host ("  {0,-30} {1}" -f $_.Name, $_.Count) }
+
+# â”€â”€ Export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+$results |
+    Sort-Object WindowsRelease, Hostname |
+    Export-Csv -Path $csvOutput -NoTypeInformation -Encoding UTF8
+
+Write-Host "`nDone. Results saved to: $csvOutput" -ForegroundColor Green
+
+Disconnect-MgGraph | Out-Null
