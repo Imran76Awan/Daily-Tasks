@@ -558,5 +558,14 @@ $outDir = Split-Path $OutputPath -Parent
 if (-not (Test-Path $outDir)) { New-Item -ItemType Directory -Path $outDir -Force | Out-Null }
 $html | Out-File -FilePath $OutputPath -Encoding UTF8
 
+# Also write a fixed-name copy so you have one stable path to bookmark instead of
+# hunting for the newest timestamped file each time.
+$latestPath = Join-Path $outDir 'latest-failure-analysis.html'
+Copy-Item -Path $OutputPath -Destination $latestPath -Force
+if ($csvOutPath -and (Test-Path $csvOutPath)) {
+    Copy-Item -Path $csvOutPath -Destination (Join-Path $outDir 'latest-failure-analysis-devices.csv') -Force
+}
+
 Write-Host "`nHTML report saved: $OutputPath" -ForegroundColor Green
+Write-Host "Always-latest copy: $latestPath" -ForegroundColor Cyan
 try { Start-Process $OutputPath } catch {}
