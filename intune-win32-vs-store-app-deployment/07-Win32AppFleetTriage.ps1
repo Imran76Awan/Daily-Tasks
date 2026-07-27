@@ -372,6 +372,18 @@ $stateStyle = @{
     'Unknown'         = @{ Color = '#6b7280'; Icon = '&#63;'   }
 }
 
+# Rendering every device inline made single-app sections hundreds of thousands of
+# pixels tall for popular apps (one 17k-device app measured 868,000px). Cap the
+# inline per-app table, prioritise the states worth reviewing first, and export
+# the full per-app device list to CSV alongside the HTML so nothing is lost.
+$stateReviewPriority = @{
+    'Failed' = 0; 'UninstallFailed' = 1; 'Unknown' = 2; 'NotInstalled' = 3
+    'PendingInstall' = 4; 'NotApplicable' = 5; 'Installed' = 6
+}
+$maxDeviceRowsPerApp = 200
+$csvOutDir = Split-Path $OutputPath -Parent
+if (-not (Test-Path $csvOutDir)) { New-Item -ItemType Directory -Path $csvOutDir -Force | Out-Null }
+
 $rankingRowsHtml = ($appDetails | ForEach-Object {
     $rateColor = if ($_.IsFlagged) { '#d03b3b' } elseif ($_.Records.Count -eq 0) { '#9ca3af' } else { '#0ca30c' }
     $flagBadge = if ($_.IsFlagged) { "<span style='font-size:10px;font-weight:700;text-transform:uppercase;color:#fff;background:#d03b3b;padding:2px 8px;border-radius:10px;margin-left:8px'>Flagged</span>" } else { '' }
@@ -430,7 +442,30 @@ $allAppSectionsHtml = ($appDetails | ForEach-Object {
         }) -join "`n"
     } else { '' }
 
-    $deviceRows = ($detail.Records | Sort-Object InstallState | ForEach-Object {
+    # Rendering every device inline made single-app sections hundreds of thousands
+    # of pixels tall for popular apps. Cap the inline table, prioritise the states
+    # an engineer actually needs to review (Failed first, Installed last), and
+    # export the FULL per-app list to CSV so nothing is actually lost.
+    $sortedDetailRecords = $detail.Records | Sort-Object @{ Expression = { if ($stateReviewPriority.ContainsKey($_.InstallState)) { $stateReviewPriority[$_.InstallState] } else { 99 } } }, DeviceName
+    $detailRecordsForTable = $sortedDetailRecords | Select-Object -First $maxDeviceRowsPerApp
+
+    $appCsvPath = $null
+    if ($detail.Records.Count -gt 0) {
+        $safeAppName = ($detail.DisplayName -replace '[^\w\-]', '_')
+        $appCsvPath = Join-Path $csvOutDir "$($detail.AnchorId)-$safeAppName-devices.csv"
+        $detail.Records | ForEach-Object {
+            [pscustomobject]@{
+                DeviceName   = Get-MaskedName $_.DeviceName
+                UserName     = Get-MaskedName $_.UserName
+                InstallState = $_.InstallState
+                HexErrorCode = $_.HexErrorCode
+                Platform     = $_.Platform
+                LastModified = $_.LastModified
+            }
+        } | Export-Csv -Path $appCsvPath -NoTypeInformation -Encoding UTF8
+    }
+
+    $deviceRows = ($detailRecordsForTable | ForEach-Object {
         $r = $_
         $maskedDevice = Get-MaskedName $r.DeviceName
         $maskedUser   = Get-MaskedName $r.UserName
@@ -472,6 +507,9 @@ $allAppSectionsHtml = ($appDetails | ForEach-Object {
   })
 
   <h3 style="font-size:14px;margin:0 0 10px;color:#052e16">Per-device detail <span style="font-size:12px;font-weight:400;color:#9ca3af">(names masked)</span></h3>
+  $(if ($detail.Records.Count -gt $maxDeviceRowsPerApp) {
+"<div style='background:#fffbeb;border-left:3px solid #fab219;border-radius:0 6px 6px 0;padding:8px 12px;margin-bottom:12px;font-size:12.5px;color:#78350f'>Showing the $maxDeviceRowsPerApp highest-priority rows (Failed and other non-Installed states first) out of $($detail.Records.Count) total. <a href='$([System.IO.Path]::GetFileName($appCsvPath))' style='color:#047857;font-weight:600'>Download the full CSV</a> for every record.</div>"
+  })
   <div class="table-scroll"><table>
     <tr><th>Device</th><th>User</th><th>State</th><th>Error</th><th>Platform</th><th>Last activity</th></tr>
     $deviceRows

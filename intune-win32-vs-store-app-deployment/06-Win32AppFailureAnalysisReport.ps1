@@ -415,7 +415,20 @@ $reasonRowsHtml = ($rankedReasons | ForEach-Object {
 }) -join "`n"
 
 # ── Per-device detail table ──────────────────────────────────────────────────────
-$deviceRowsHtml = ($allRecords | Sort-Object InstallState | ForEach-Object {
+# Rendering every device inline made this table (and the page) enormous for big
+# apps — one 17k-device app produced an 868,000px-tall page. Cap the inline table,
+# prioritise the states an engineer actually needs to look at (Failed first, then
+# other non-Installed states, Installed last since "it worked" needs no review),
+# and export the FULL list to CSV alongside so nothing is actually lost.
+$stateReviewPriority = @{
+    'Failed' = 0; 'UninstallFailed' = 1; 'Unknown' = 2; 'NotInstalled' = 3
+    'PendingInstall' = 4; 'NotApplicable' = 5; 'Installed' = 6
+}
+$maxDeviceRows = 200
+$sortedRecords = $allRecords | Sort-Object @{ Expression = { if ($stateReviewPriority.ContainsKey($_.InstallState)) { $stateReviewPriority[$_.InstallState] } else { 99 } } }, DeviceName
+$deviceRowsForTable = $sortedRecords | Select-Object -First $maxDeviceRows
+
+$deviceRowsHtml = ($deviceRowsForTable | ForEach-Object {
     $maskedDevice = Get-MaskedName $_.DeviceName
     $maskedUser   = Get-MaskedName $_.UserName
     $style = if ($stateStyle.ContainsKey($_.InstallState)) { $stateStyle[$_.InstallState] } else { @{ Color = '#6b7280'; Icon = '&#8226;' } }
@@ -430,6 +443,23 @@ $deviceRowsHtml = ($allRecords | Sort-Object InstallState | ForEach-Object {
 </tr>
 "@
 }) -join "`n"
+
+# Export the complete, unfiltered per-device list (masked unless -IncludeNames)
+$csvOutPath = $null
+if ($allRecords.Count -gt 0) {
+    $csvOutPath = [System.IO.Path]::ChangeExtension($OutputPath, $null).TrimEnd('.') + '-devices.csv'
+    $allRecords | ForEach-Object {
+        [pscustomobject]@{
+            AppName      = $_.AppName
+            DeviceName   = Get-MaskedName $_.DeviceName
+            UserName     = Get-MaskedName $_.UserName
+            InstallState = $_.InstallState
+            ErrorCode    = $_.ErrorCode
+            HexErrorCode = $_.HexErrorCode
+            Platform     = $_.Platform
+        }
+    } | Export-Csv -Path $csvOutPath -NoTypeInformation -Encoding UTF8
+}
 
 $html = @"
 <!DOCTYPE html>
@@ -505,6 +535,9 @@ th:last-child{border-radius:0 8px 0 0}
 
   <div class="card">
     <h2>&#128187; Per-Device Detail $(if (-not $IncludeNames) { '<span style="font-size:12px;font-weight:400;color:#9ca3af">(device &amp; user names masked)</span>' })</h2>
+    $(if ($allRecords.Count -gt $maxDeviceRows) {
+"<div style='background:#fffbeb;border-left:3px solid #fab219;border-radius:0 6px 6px 0;padding:10px 14px;margin-bottom:16px;font-size:13px;color:#78350f'>Showing the $maxDeviceRows highest-priority rows (Failed and other non-Installed states first) out of $($allRecords.Count) total device records. <a href='$([System.IO.Path]::GetFileName($csvOutPath))' style='color:#047857;font-weight:600'>Download the full CSV</a> for every record.</div>"
+    })
     <div class="table-scroll">
     <table>
       <tr><th>App</th><th>Device</th><th>User</th><th>State</th><th>Error</th><th>Platform</th></tr>
