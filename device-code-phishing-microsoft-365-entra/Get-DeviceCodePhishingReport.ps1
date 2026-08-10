@@ -83,17 +83,9 @@ param(
 
 #region --- Prerequisites ---
 
-$requiredModules = @(
-    'Microsoft.Graph.Authentication',
-    'Microsoft.Graph.Groups',
-    'Microsoft.Graph.DeviceManagement'
-)
-
-foreach ($mod in $requiredModules) {
-    if (-not (Get-Module -ListAvailable -Name $mod)) {
-        Write-Host "Installing $mod..." -ForegroundColor Cyan
-        Install-Module $mod -Scope CurrentUser -Force -AllowClobber
-    }
+if (-not (Get-Module -ListAvailable -Name 'Microsoft.Graph.Authentication')) {
+    Write-Host "Installing Microsoft.Graph.Authentication..." -ForegroundColor Cyan
+    Install-Module Microsoft.Graph.Authentication -Scope CurrentUser -Force -AllowClobber
 }
 
 #endregion
@@ -125,26 +117,30 @@ if ($GroupId -or $GroupName) {
 
     if (-not $GroupId) {
         Write-Host "Resolving group name '$GroupName'..." -ForegroundColor Gray
-        $group = Get-MgGroup -Filter "displayName eq '$GroupName'" -ErrorAction Stop | Select-Object -First 1
+        $encodedName = [Uri]::EscapeDataString("displayName eq '$GroupName'")
+        $groupResp = Invoke-MgGraphRequest -Uri "https://graph.microsoft.com/v1.0/groups?`$filter=$encodedName&`$select=id,displayName" -Method GET -ErrorAction Stop
+        $group = $groupResp.value | Select-Object -First 1
         if (-not $group) {
             Write-Warning "Group '$GroupName' not found. Check the display name and try again."
             return
         }
-        $GroupId = $group.Id
+        $GroupId = $group.id
         Write-Host "Resolved to Group ID: $GroupId" -ForegroundColor Gray
     }
 
     Write-Host "Loading group members..." -ForegroundColor Gray
     try {
-        $members = Get-MgGroupMember -GroupId $GroupId -All -ErrorAction Stop
         $groupMemberUPNs = @{}
-        foreach ($m in $members) {
-            # Members can be users, groups, or service principals  -  only users have UPN
-            $user = Get-MgUser -UserId $m.Id -Property "userPrincipalName" -ErrorAction SilentlyContinue
-            if ($user.UserPrincipalName) {
-                $groupMemberUPNs[$user.UserPrincipalName.ToLower()] = $true
+        $membersUri = "https://graph.microsoft.com/v1.0/groups/$GroupId/members?`$select=userPrincipalName&`$top=999"
+        do {
+            $membersResp = Invoke-MgGraphRequest -Uri $membersUri -Method GET -ErrorAction Stop
+            foreach ($m in $membersResp.value) {
+                if ($m.userPrincipalName) {
+                    $groupMemberUPNs[$m.userPrincipalName.ToLower()] = $true
+                }
             }
-        }
+            $membersUri = $membersResp.'@odata.nextLink'
+        } while ($membersUri)
         Write-Host "Group contains $($groupMemberUPNs.Count) user(s). Sign-in results will be filtered to these members." -ForegroundColor Gray
     }
     catch {
@@ -217,12 +213,9 @@ $results = foreach ($signIn in $signIns) {
     if ($deviceId -and $deviceId -ne "00000000-0000-0000-0000-000000000000") {
         if (-not $intuneCache.ContainsKey($deviceId)) {
             try {
-                $hit = Get-MgDeviceManagementManagedDevice `
-                    -Filter "azureADDeviceId eq '$deviceId'" `
-                    -Property "deviceName,operatingSystem,osVersion,lastSyncDateTime,complianceState,managementState" `
-                    -ErrorAction SilentlyContinue |
-                    Select-Object -First 1
-                $intuneCache[$deviceId] = $hit
+                $encodedDeviceFilter = [Uri]::EscapeDataString("azureADDeviceId eq '$deviceId'")
+                $intuneResp = Invoke-MgGraphRequest -Uri "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices?`$filter=$encodedDeviceFilter&`$select=deviceName,operatingSystem,osVersion,lastSyncDateTime,complianceState,managementState&`$top=1" -Method GET -ErrorAction SilentlyContinue
+                $intuneCache[$deviceId] = $intuneResp.value | Select-Object -First 1
             }
             catch {
                 $intuneCache[$deviceId] = $null
@@ -246,12 +239,12 @@ $results = foreach ($signIn in $signIns) {
         VictimDeviceName       = $signIn.deviceDetail.displayName
         VictimDeviceOS         = $signIn.deviceDetail.operatingSystem
         # Intune record (if managed)
-        IntuneDeviceName       = $intuneDevice.DeviceName
-        IntuneOS               = $intuneDevice.OperatingSystem
-        IntuneOSVersion        = $intuneDevice.OsVersion
-        IntuneCompliance       = $intuneDevice.ComplianceState
-        IntuneLastSync         = $intuneDevice.LastSyncDateTime
-        IntuneManagementState  = $intuneDevice.ManagementState
+        IntuneDeviceName       = $intuneDevice.deviceName
+        IntuneOS               = $intuneDevice.operatingSystem
+        IntuneOSVersion        = $intuneDevice.osVersion
+        IntuneCompliance       = $intuneDevice.complianceState
+        IntuneLastSync         = $intuneDevice.lastSyncDateTime
+        IntuneManagementState  = $intuneDevice.managementState
         # Risk signals
         RiskLevelDuringSignIn  = $signIn.riskLevelDuringSignIn
         RiskLevelAggregated    = $signIn.riskLevelAggregated
