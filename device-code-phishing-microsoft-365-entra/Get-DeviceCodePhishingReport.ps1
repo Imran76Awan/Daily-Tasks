@@ -36,6 +36,16 @@
 .PARAMETER ExportPath
     Full path for the output CSV. Defaults to Desktop with a date-stamped filename.
 
+.PARAMETER TenantId
+    Entra ID tenant ID or domain (e.g. contoso.onmicrosoft.com). Required for certificate auth.
+
+.PARAMETER ClientId
+    App registration (service principal) client ID. Required for certificate auth.
+
+.PARAMETER CertificateThumbprint
+    Thumbprint of the client certificate installed in the local certificate store.
+    Required for certificate auth. Use with -TenantId and -ClientId to avoid interactive sign-in.
+
 .PARAMETER SuccessfulOnly
     If specified, only exports successful device code sign-ins (ErrorCode = 0).
     Use this to focus on confirmed compromises rather than blocked/failed attempts.
@@ -47,16 +57,16 @@
     Blog:     https://endpointweekly.com/blog/device-code-phishing-microsoft-365-entra.html
 
 .EXAMPLE
-    .\Get-DeviceCodePhishingReport.ps1 -LookbackDays 30
-    Queries last 30 days across the whole tenant.
+    .\Get-DeviceCodePhishingReport.ps1 -TenantId "contoso.onmicrosoft.com" -ClientId "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" -CertificateThumbprint "AABBCCDDEEFF00112233445566778899AABBCCDD" -LookbackDays 30
+    Connects via certificate (no browser prompt) and queries last 30 days across the whole tenant.
+
+.EXAMPLE
+    .\Get-DeviceCodePhishingReport.ps1 -TenantId "contoso.onmicrosoft.com" -ClientId "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" -CertificateThumbprint "AABBCCDDEEFF..." -GroupName "Finance" -LookbackDays 30
+    Cert auth, scoped to the Finance group.
 
 .EXAMPLE
     .\Get-DeviceCodePhishingReport.ps1 -GroupName "Finance" -LookbackDays 30
-    Queries only members of the Finance group for the last 30 days.
-
-.EXAMPLE
-    .\Get-DeviceCodePhishingReport.ps1 -GroupId "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" -SuccessfulOnly
-    Queries only confirmed compromises for members of the specified group.
+    Interactive sign-in fallback (device code - works in any terminal).
 #>
 
 [CmdletBinding()]
@@ -64,6 +74,9 @@ param(
     [int]$LookbackDays = 30,
     [string]$GroupId,
     [string]$GroupName,
+    [string]$TenantId,
+    [string]$ClientId,
+    [string]$CertificateThumbprint,
     [string]$ExportPath = "$env:USERPROFILE\Desktop\DeviceCodePhishingReport_$(Get-Date -Format 'yyyyMMdd_HHmmss').csv",
     [switch]$SuccessfulOnly
 )
@@ -92,10 +105,16 @@ Write-Host ""
 Write-Host "Device Code Phishing  -  Tenant Investigation Script" -ForegroundColor Cyan
 Write-Host "Connecting to Microsoft Graph..." -ForegroundColor Gray
 
-$scopes = @("AuditLog.Read.All", "DeviceManagementManagedDevices.Read.All")
-if ($GroupId -or $GroupName) { $scopes += "GroupMember.Read.All" }
-
-Connect-MgGraph -Scopes $scopes -NoWelcome
+if ($TenantId -and $ClientId -and $CertificateThumbprint) {
+    Write-Host "Authenticating with certificate..." -ForegroundColor Gray
+    Connect-MgGraph -TenantId $TenantId -ClientId $ClientId -CertificateThumbprint $CertificateThumbprint -NoWelcome -ErrorAction Stop
+}
+else {
+    Write-Host "No certificate parameters supplied - using device code (browser-independent)..." -ForegroundColor Gray
+    $scopes = @("AuditLog.Read.All", "DeviceManagementManagedDevices.Read.All")
+    if ($GroupId -or $GroupName) { $scopes += "GroupMember.Read.All" }
+    Connect-MgGraph -Scopes $scopes -UseDeviceCode -NoWelcome -ErrorAction Stop
+}
 
 #endregion
 
