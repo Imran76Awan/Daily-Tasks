@@ -85,9 +85,9 @@ param(
 
 $requiredModules = @(
     'Microsoft.Graph.Authentication',
-    'Microsoft.Graph.Reports',
-    'Microsoft.Graph.DeviceManagement',
-    'Microsoft.Graph.Groups'
+    'Microsoft.Graph.Beta.Reports',
+    'Microsoft.Graph.Beta.DeviceManagement',
+    'Microsoft.Graph.Beta.Groups'
 )
 
 foreach ($mod in $requiredModules) {
@@ -126,7 +126,7 @@ if ($GroupId -or $GroupName) {
 
     if (-not $GroupId) {
         Write-Host "Resolving group name '$GroupName'..." -ForegroundColor Gray
-        $group = Get-MgGroup -Filter "displayName eq '$GroupName'" -ErrorAction Stop | Select-Object -First 1
+        $group = Get-MgBetaGroup -Filter "displayName eq '$GroupName'" -ErrorAction Stop | Select-Object -First 1
         if (-not $group) {
             Write-Warning "Group '$GroupName' not found. Check the display name and try again."
             return
@@ -137,11 +137,11 @@ if ($GroupId -or $GroupName) {
 
     Write-Host "Loading group members..." -ForegroundColor Gray
     try {
-        $members = Get-MgGroupMember -GroupId $GroupId -All -ErrorAction Stop
+        $members = Get-MgBetaGroupMember -GroupId $GroupId -All -ErrorAction Stop
         $groupMemberUPNs = @{}
         foreach ($m in $members) {
             # Members can be users, groups, or service principals  -  only users have UPN
-            $user = Get-MgUser -UserId $m.Id -Property "userPrincipalName" -ErrorAction SilentlyContinue
+            $user = Get-MgBetaUser -UserId $m.Id -Property "userPrincipalName" -ErrorAction SilentlyContinue
             if ($user.UserPrincipalName) {
                 $groupMemberUPNs[$user.UserPrincipalName.ToLower()] = $true
             }
@@ -168,7 +168,7 @@ if ($SuccessfulOnly) {
 Write-Host "Querying sign-in logs  -  last $LookbackDays days, filter: deviceCode..." -ForegroundColor Gray
 
 try {
-    $signIns = Get-MgAuditLogSignIn `
+    $signIns = Get-MgBetaAuditLogSignIn `
         -Filter $filter `
         -All `
         -Property "id,createdDateTime,userPrincipalName,userDisplayName,ipAddress,location,appDisplayName,appId,deviceDetail,status,riskLevelDuringSignIn,riskLevelAggregated,conditionalAccessStatus,clientAppUsed" `
@@ -211,7 +211,7 @@ $results = foreach ($signIn in $signIns) {
     if ($deviceId -and $deviceId -ne "00000000-0000-0000-0000-000000000000") {
         if (-not $intuneCache.ContainsKey($deviceId)) {
             try {
-                $hit = Get-MgDeviceManagementManagedDevice `
+                $hit = Get-MgBetaDeviceManagementManagedDevice `
                     -Filter "azureADDeviceId eq '$deviceId'" `
                     -Property "deviceName,operatingSystem,osVersion,lastSyncDateTime,complianceState,managementState" `
                     -ErrorAction SilentlyContinue |
