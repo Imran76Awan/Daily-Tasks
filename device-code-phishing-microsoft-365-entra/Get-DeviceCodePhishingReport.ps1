@@ -85,7 +85,6 @@ param(
 
 $requiredModules = @(
     'Microsoft.Graph.Authentication',
-    'Microsoft.Graph.Beta.Reports',      # beta needed for authenticationProtocol filter on sign-in logs
     'Microsoft.Graph.Groups',
     'Microsoft.Graph.DeviceManagement'
 )
@@ -167,17 +166,24 @@ if ($SuccessfulOnly) {
 
 Write-Host "Querying sign-in logs  -  last $LookbackDays days, filter: deviceCode..." -ForegroundColor Gray
 
+# Use Invoke-MgGraphRequest against the beta endpoint directly.
+# authenticationProtocol is a beta-only filter property and is not available on v1.0.
+$select = "id,createdDateTime,userPrincipalName,userDisplayName,ipAddress,location,appDisplayName,appId,deviceDetail,status,riskLevelDuringSignIn,riskLevelAggregated,conditionalAccessStatus,clientAppUsed,authenticationProtocol"
+$encodedFilter = [Uri]::EscapeDataString($filter)
+$uri = "https://graph.microsoft.com/beta/auditLogs/signIns?`$filter=$encodedFilter&`$select=$select&`$top=999"
+
+$signIns = [System.Collections.Generic.List[object]]::new()
+
 try {
-    $signIns = Get-MgBetaAuditLogSignIn `
-        -Filter $filter `
-        -All `
-        -Property "id,createdDateTime,userPrincipalName,userDisplayName,ipAddress,location,appDisplayName,appId,deviceDetail,status,riskLevelDuringSignIn,riskLevelAggregated,conditionalAccessStatus,clientAppUsed" `
-        -ErrorAction Stop
+    do {
+        $response = Invoke-MgGraphRequest -Uri $uri -Method GET -ErrorAction Stop
+        foreach ($item in $response.value) { $signIns.Add($item) }
+        $uri = $response.'@odata.nextLink'
+    } while ($uri)
 }
 catch {
     Write-Warning "Query failed: $($_.Exception.Message)"
-    Write-Host "If you see 'Property not supported', your tenant may require the beta endpoint." -ForegroundColor Yellow
-    Write-Host "Try: Connect-MgGraph -Scopes 'AuditLog.Read.All','DeviceManagementManagedDevices.Read.All'; then re-run." -ForegroundColor Yellow
+    Write-Host "Ensure the app registration has AuditLog.Read.All application permission in Entra ID." -ForegroundColor Yellow
     return
 }
 
@@ -185,7 +191,7 @@ Write-Host "Found $($signIns.Count) device code sign-in event(s) across the tena
 
 # Apply group filter if scoped
 if ($groupMemberUPNs -ne $null) {
-    $signIns = $signIns | Where-Object { $groupMemberUPNs.ContainsKey($_.UserPrincipalName.ToLower()) }
+    $signIns = $signIns | Where-Object { $groupMemberUPNs.ContainsKey($_.userPrincipalName.ToLower()) }
     Write-Host "After filtering to group members: $($signIns.Count) event(s)." -ForegroundColor $(if ($signIns.Count -gt 0) { 'Yellow' } else { 'Green' })
 }
 
@@ -205,7 +211,7 @@ $intuneCache = @{}
 
 $results = foreach ($signIn in $signIns) {
 
-    $deviceId = $signIn.DeviceDetail.DeviceId
+    $deviceId = $signIn.deviceDetail.deviceId
     $intuneDevice = $null
 
     if ($deviceId -and $deviceId -ne "00000000-0000-0000-0000-000000000000") {
@@ -226,19 +232,19 @@ $results = foreach ($signIn in $signIns) {
     }
 
     [PSCustomObject]@{
-        Timestamp              = $signIn.CreatedDateTime
-        UserPrincipalName      = $signIn.UserPrincipalName
-        UserDisplayName        = $signIn.UserDisplayName
-        SignInResult           = if ($signIn.Status.ErrorCode -eq 0) { 'Success' } else { "Failure ($($signIn.Status.FailureReason))" }
-        AttackerIP             = $signIn.IpAddress
-        City                   = $signIn.Location.City
-        Country                = $signIn.Location.CountryOrRegion
-        AppGranted             = $signIn.AppDisplayName
-        AppId                  = $signIn.AppId
+        Timestamp              = $signIn.createdDateTime
+        UserPrincipalName      = $signIn.userPrincipalName
+        UserDisplayName        = $signIn.userDisplayName
+        SignInResult           = if ($signIn.status.errorCode -eq 0) { 'Success' } else { "Failure ($($signIn.status.failureReason))" }
+        AttackerIP             = $signIn.ipAddress
+        City                   = $signIn.location.city
+        Country                = $signIn.location.countryOrRegion
+        AppGranted             = $signIn.appDisplayName
+        AppId                  = $signIn.appId
         # Device that completed the sign-in (victim's machine)
         VictimDeviceId         = $deviceId
-        VictimDeviceName       = $signIn.DeviceDetail.DisplayName
-        VictimDeviceOS         = $signIn.DeviceDetail.OperatingSystem
+        VictimDeviceName       = $signIn.deviceDetail.displayName
+        VictimDeviceOS         = $signIn.deviceDetail.operatingSystem
         # Intune record (if managed)
         IntuneDeviceName       = $intuneDevice.DeviceName
         IntuneOS               = $intuneDevice.OperatingSystem
@@ -247,11 +253,11 @@ $results = foreach ($signIn in $signIns) {
         IntuneLastSync         = $intuneDevice.LastSyncDateTime
         IntuneManagementState  = $intuneDevice.ManagementState
         # Risk signals
-        RiskLevelDuringSignIn  = $signIn.RiskLevelDuringSignIn
-        RiskLevelAggregated    = $signIn.RiskLevelAggregated
-        ConditionalAccess      = $signIn.ConditionalAccessStatus
-        ClientApp              = $signIn.ClientAppUsed
-        AuthProtocol           = $signIn.AuthenticationProtocol
+        RiskLevelDuringSignIn  = $signIn.riskLevelDuringSignIn
+        RiskLevelAggregated    = $signIn.riskLevelAggregated
+        ConditionalAccess      = $signIn.conditionalAccessStatus
+        ClientApp              = $signIn.clientAppUsed
+        AuthProtocol           = $signIn.authenticationProtocol
     }
 }
 
