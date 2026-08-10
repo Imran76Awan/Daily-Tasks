@@ -248,7 +248,7 @@ $uniqueCountries = @($results | Select-Object -ExpandProperty Country -Unique)
 $managed        = @($results | Where-Object { $_.IntuneDeviceName })
 
 Write-Host ""
-$scopeLabel = if ($groupMemberUPNs -ne $null) { "Group: $($GroupName ?? $GroupId)" } else { "Whole tenant" }
+$scopeLabel = if ($groupMemberUPNs -ne $null) { "Group: $(if ($GroupName) { $GroupName } else { $GroupId })" } else { "Whole tenant" }
 Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host " Device Code Phishing — Investigation Summary" -ForegroundColor Cyan
 Write-Host " Scope: $scopeLabel" -ForegroundColor Cyan
