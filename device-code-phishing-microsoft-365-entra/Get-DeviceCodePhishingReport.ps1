@@ -18,7 +18,7 @@
 
     Risk levels assigned automatically:
       HIGH   — app is not a known Microsoft admin/dev tool (unknown third-party or suspicious name)
-      MEDIUM — service/room accounts (bcgcloud.onmicrosoft.com or similar tenant service domains)
+      MEDIUM — service/room accounts (non-primary onmicrosoft.com domains or service account patterns)
       LOW    — known Microsoft tools: Azure CLI, Graph CLI, Az PowerShell, SharePoint Shell, Dev Tunnels
 
     Run this against a tenant or group to answer: which users and devices were targeted or compromised?
@@ -125,7 +125,7 @@ function Get-SignInRisk {
     )
 
     # Service/room accounts: non-primary onmicrosoft.com tenant domains or custom service domains
-    $allServiceDomains = @('bcgcloud.onmicrosoft.com') + $ServiceDomains
+    $allServiceDomains = @() + $ServiceDomains
     foreach ($d in $allServiceDomains) {
         if ($Upn -like "*@$d") { return 'medium' }
     }
