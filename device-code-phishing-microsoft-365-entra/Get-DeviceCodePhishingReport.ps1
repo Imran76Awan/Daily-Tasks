@@ -85,9 +85,9 @@ param(
 
 $requiredModules = @(
     'Microsoft.Graph.Authentication',
-    'Microsoft.Graph.Beta.Reports',
-    'Microsoft.Graph.Beta.DeviceManagement',
-    'Microsoft.Graph.Beta.Groups'
+    'Microsoft.Graph.Beta.Reports',      # beta needed for authenticationProtocol filter on sign-in logs
+    'Microsoft.Graph.Groups',
+    'Microsoft.Graph.DeviceManagement'
 )
 
 foreach ($mod in $requiredModules) {
@@ -126,7 +126,7 @@ if ($GroupId -or $GroupName) {
 
     if (-not $GroupId) {
         Write-Host "Resolving group name '$GroupName'..." -ForegroundColor Gray
-        $group = Get-MgBetaGroup -Filter "displayName eq '$GroupName'" -ErrorAction Stop | Select-Object -First 1
+        $group = Get-MgGroup -Filter "displayName eq '$GroupName'" -ErrorAction Stop | Select-Object -First 1
         if (-not $group) {
             Write-Warning "Group '$GroupName' not found. Check the display name and try again."
             return
@@ -137,11 +137,11 @@ if ($GroupId -or $GroupName) {
 
     Write-Host "Loading group members..." -ForegroundColor Gray
     try {
-        $members = Get-MgBetaGroupMember -GroupId $GroupId -All -ErrorAction Stop
+        $members = Get-MgGroupMember -GroupId $GroupId -All -ErrorAction Stop
         $groupMemberUPNs = @{}
         foreach ($m in $members) {
             # Members can be users, groups, or service principals  -  only users have UPN
-            $user = Get-MgBetaUser -UserId $m.Id -Property "userPrincipalName" -ErrorAction SilentlyContinue
+            $user = Get-MgUser -UserId $m.Id -Property "userPrincipalName" -ErrorAction SilentlyContinue
             if ($user.UserPrincipalName) {
                 $groupMemberUPNs[$user.UserPrincipalName.ToLower()] = $true
             }
@@ -211,7 +211,7 @@ $results = foreach ($signIn in $signIns) {
     if ($deviceId -and $deviceId -ne "00000000-0000-0000-0000-000000000000") {
         if (-not $intuneCache.ContainsKey($deviceId)) {
             try {
-                $hit = Get-MgBetaDeviceManagementManagedDevice `
+                $hit = Get-MgDeviceManagementManagedDevice `
                     -Filter "azureADDeviceId eq '$deviceId'" `
                     -Property "deviceName,operatingSystem,osVersion,lastSyncDateTime,complianceState,managementState" `
                     -ErrorAction SilentlyContinue |
