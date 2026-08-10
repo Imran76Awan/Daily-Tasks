@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Queries Entra ID sign-in logs for device code flow events and correlates with Intune device records.
 
@@ -89,7 +89,7 @@ foreach ($mod in $requiredModules) {
 #region --- Connect ---
 
 Write-Host ""
-Write-Host "Device Code Phishing — Tenant Investigation Script" -ForegroundColor Cyan
+Write-Host "Device Code Phishing  -  Tenant Investigation Script" -ForegroundColor Cyan
 Write-Host "Connecting to Microsoft Graph..." -ForegroundColor Gray
 
 $scopes = @("AuditLog.Read.All", "DeviceManagementManagedDevices.Read.All")
@@ -121,7 +121,7 @@ if ($GroupId -or $GroupName) {
         $members = Get-MgGroupMember -GroupId $GroupId -All -ErrorAction Stop
         $groupMemberUPNs = @{}
         foreach ($m in $members) {
-            # Members can be users, groups, or service principals — only users have UPN
+            # Members can be users, groups, or service principals  -  only users have UPN
             $user = Get-MgUser -UserId $m.Id -Property "userPrincipalName" -ErrorAction SilentlyContinue
             if ($user.UserPrincipalName) {
                 $groupMemberUPNs[$user.UserPrincipalName.ToLower()] = $true
@@ -146,7 +146,7 @@ if ($SuccessfulOnly) {
     $filter += " and status/errorCode eq 0"
 }
 
-Write-Host "Querying sign-in logs — last $LookbackDays days, filter: deviceCode..." -ForegroundColor Gray
+Write-Host "Querying sign-in logs  -  last $LookbackDays days, filter: deviceCode..." -ForegroundColor Gray
 
 try {
     $signIns = Get-MgAuditLogSignIn `
@@ -250,7 +250,7 @@ $managed        = @($results | Where-Object { $_.IntuneDeviceName })
 Write-Host ""
 $scopeLabel = if ($groupMemberUPNs -ne $null) { "Group: $(if ($GroupName) { $GroupName } else { $GroupId })" } else { "Whole tenant" }
 Write-Host "==========================================" -ForegroundColor Cyan
-Write-Host " Device Code Phishing — Investigation Summary" -ForegroundColor Cyan
+Write-Host " Device Code Phishing  -  Investigation Summary" -ForegroundColor Cyan
 Write-Host " Scope: $scopeLabel" -ForegroundColor Cyan
 Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host "  Total events found:        $($results.Count)"
