@@ -171,7 +171,7 @@ try {
     $signIns = Get-MgAuditLogSignIn `
         -Filter $filter `
         -All `
-        -Property "id,createdDateTime,userPrincipalName,userDisplayName,ipAddress,location,appDisplayName,appId,deviceDetail,status,riskLevelDuringSignIn,riskLevelAggregated,conditionalAccessStatus,clientAppUsed,originalTransferMethod" `
+        -Property "id,createdDateTime,userPrincipalName,userDisplayName,ipAddress,location,appDisplayName,appId,deviceDetail,status,riskLevelDuringSignIn,riskLevelAggregated,conditionalAccessStatus,clientAppUsed" `
         -ErrorAction Stop
 }
 catch {
@@ -251,6 +251,7 @@ $results = foreach ($signIn in $signIns) {
         RiskLevelAggregated    = $signIn.RiskLevelAggregated
         ConditionalAccess      = $signIn.ConditionalAccessStatus
         ClientApp              = $signIn.ClientAppUsed
+        AuthProtocol           = $signIn.AuthenticationProtocol
     }
 }
 
