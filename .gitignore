@@ -1,0 +1,26 @@
+# Generated script output — never commit these.
+#
+# The scripts in this repository are read-only diagnostics, but several write
+# their findings to a reports/ folder or export a CSV. That output contains real
+# data from whichever tenant the script was run against: device names, user
+# names, app inventory, failure counts and organisation-scale totals.
+#
+# Even when device and user names are masked, the software inventory and the
+# scale of the numbers still identify the organisation. This repository is
+# public, so generated output must stay local.
+
+# Report output folders produced by the scripts
+reports/
+Reports/
+
+# Ad-hoc exports (scripts commonly take -ExportCsv / -CsvPath)
+*.csv
+
+# Rendered HTML reports produced alongside the CSVs
+latest-*.html
+*-analysis.html
+*-report.html
+
+# Local scratch
+*.log
+*.tmp
