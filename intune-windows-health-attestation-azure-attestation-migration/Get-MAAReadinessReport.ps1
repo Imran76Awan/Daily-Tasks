@@ -9,9 +9,9 @@
     each affected policy and tests TCP/443 connectivity to all MAA endpoints from the current
     execution context.
 
-    Run this script as SYSTEM (via a scheduled task) to test the network path that the
-    HealthAttestation service actually uses. Running as a regular user tests a different proxy
-    configuration and may return a false-positive healthy result.
+    Run this script as SYSTEM (via a scheduled task) to test the network path that
+    HealthAttestationClientAgent.exe actually uses. Running as a regular user tests a different
+    proxy configuration and may return a false-positive healthy result.
 
     Uses app-only authentication (certificate) for unattended runs or -UseDeviceCode for
     interactive testing. Requires the Microsoft Graph PowerShell SDK module.
@@ -208,7 +208,7 @@ if ($blockedCount -gt 0) {
 } else {
     Write-Host ''
     Write-Host 'MAA endpoints are reachable from this context. Verify from SYSTEM context' -ForegroundColor Green
-    Write-Host 'to confirm the HealthAttestation service will also have access.' -ForegroundColor Green
+    Write-Host 'to confirm HealthAttestationClientAgent.exe will also have access.' -ForegroundColor Green
 }
 
 if ($ExportCsv) {
