@@ -13,7 +13,7 @@ Full write-up: <https://endpointweekly.com/blog/whfb-device-triage-report-offlin
 | File | What it does | Writes anything? |
 |---|---|---|
 | `Get-WHFBDeviceReport.ps1` | Reads all eight surfaces, scores a verdict, writes a JSON report | Only the JSON report |
-| `whfb-device-report.html` | Offline viewer for that JSON. One file, no libraries, no network calls | No |
+| `whfb-report-viewer.html` | Offline viewer for that JSON. One file, no libraries, no network calls | No |
 | `Detect-WHFBDeviceHealth.ps1` | Intune Proactive Remediation detection, same checks in the same order | No |
 | `Remediate-WHFBDeviceHealth.ps1` | Safe repairs only, and refuses the destructive ones on purpose | Starts services, triggers tasks, writes a log |
 
@@ -25,7 +25,10 @@ Full write-up: <https://endpointweekly.com/blog/whfb-device-triage-report-offlin
 ```
 
 It prints a summary and writes `WHFB-Device-<name>-<date>.json` beside itself. Download
-`whfb-device-report.html`, open it from your own disk, and load that file.
+`whfb-report-viewer.html`, open it from your own disk, and load that file.
+
+> The viewer is deliberately **not** called `*-report.html`: this repository's `.gitignore` blocks
+> that pattern so generated reports containing real tenant data can never be committed by accident.
 
 ```powershell
 # Masks user names, device ID, Hello key ID and certificate thumbprints

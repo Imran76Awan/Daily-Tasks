@@ -10,7 +10,7 @@
     exists - it does not mean the person can use it, or that they ever do.
 
     This script reads all of them in one pass, scores a verdict, prints a console summary, and
-    writes a JSON file you can open in whfb-device-report.html (the offline viewer that ships
+    writes a JSON file you can open in whfb-report-viewer.html (the offline viewer that ships
     beside this script).
 
     READ-ONLY. It reads registry, certificates, services, event logs, dsregcmd, Get-Tpm and
@@ -446,7 +446,7 @@ if (-not $Quiet) {
     Write-Host ("  Sign-ins    : {0} anchor events for {1} user(s)" -f $anchors.Count, $bySid.Count)
     Write-Host ''
     Write-Host ("Report written: {0}" -f $JsonPath) -ForegroundColor Green
-    Write-Host 'Open whfb-device-report.html and load that file to read it.'
+    Write-Host 'Open whfb-report-viewer.html and load that file to read it.'
 }
 
 if ($flags.Count -gt 0) { exit 1 }

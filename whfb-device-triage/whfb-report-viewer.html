@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WHfB Device Report Viewer</title>
+<meta name="description" content="Offline viewer for the JSON report written by Get-WHFBDeviceReport.ps1. Everything is read in your own browser.">
+<style>
+  :root{
+    --bg:#f1f4f8; --panel:#fff; --ink:#0e1b27; --muted:#566676; --line:#d9e1e9; --soft:#e8eef4;
+    --accent:#0b6b88; --good:#14703c; --good-bg:#e2f3e8; --warn:#9a4a05; --warn-bg:#fcefd6;
+    --bad:#b3261e; --bad-bg:#fce6e4;
+    --mono:ui-monospace,"Cascadia Code",Consolas,"Courier New",monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0d151d; --panel:#141f2a; --ink:#e6edf4; --muted:#9bacbc; --line:#243342; --soft:#1b2936;
+      --accent:#4cc2e4; --good:#5fd08b; --good-bg:#123322; --warn:#f0b35b; --warn-bg:#3a2a10;
+      --bad:#ff8a80; --bad-bg:#3b1816; color-scheme:dark;
+    }
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  [hidden]{display:none!important}
+  body{background:var(--bg);color:var(--ink);margin:0;font-size:14px;line-height:1.55;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  h1,h2,p{margin:0}
+  button{font:inherit;color:inherit}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .page{max-width:900px;margin:0 auto;padding:22px 16px 56px}
+  header{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between;margin-bottom:16px}
+  .brand{display:flex;gap:12px;align-items:center;min-width:0}
+  .mark{width:30px;height:30px;border-radius:8px;background:var(--accent);position:relative;flex:none}
+  .mark::after{content:"";position:absolute;inset:8px;border:2.5px solid var(--panel);border-radius:50%}
+  h1{font-size:19px;font-weight:600}
+  header p{font-size:12.5px;color:var(--muted)}
+  .pill{font-size:11px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--good);
+    background:var(--good-bg);padding:3px 10px;border-radius:999px}
+  .actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:6px}
+  .btn{border:1.5px solid var(--accent);background:var(--panel);color:var(--accent);border-radius:999px;
+    padding:9px 18px;font-weight:600;cursor:pointer}
+  .btn:hover{background:var(--soft)}
+  .btn.main{background:var(--accent);color:var(--panel)}
+  .status{font-size:12.5px;color:var(--muted);min-height:20px;margin:8px 2px 12px}
+  textarea{width:100%;min-height:120px;margin:4px 0 8px;padding:10px 12px;font-family:var(--mono);
+    font-size:12px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:10px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin-top:14px}
+  .card h2{font-size:16px;font-weight:600;margin-bottom:8px}
+  .intro p{color:var(--muted);margin-bottom:12px;max-width:68ch}
+  .intro ol{margin:0 0 12px;padding-left:20px;max-width:68ch}
+  .intro li{margin-bottom:7px}
+  code{font-family:var(--mono);font-size:12px;background:var(--soft);border-radius:5px;padding:1px 6px;
+    overflow-wrap:anywhere;word-break:break-all}
+  .hero{display:flex;flex-wrap:wrap;gap:4px 18px;align-items:baseline}
+  .hero .name{font-size:26px;font-weight:600;overflow-wrap:anywhere}
+  .hero .sub{color:var(--muted);font-size:12.5px;max-width:60ch}
+  .verdict{border-radius:14px;padding:14px 18px;margin-top:14px}
+  .verdict.good{background:var(--good-bg)} .verdict.bad{background:var(--bad-bg)}
+  .verdict .head{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .badge{font-size:11px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;padding:2px 10px;
+    border-radius:999px;background:var(--panel)}
+  .verdict.good .badge{color:var(--good)} .verdict.bad .badge{color:var(--bad)}
+  .verdict ul{margin:6px 0 0;padding-left:20px}
+  .note{border-radius:12px;padding:12px 16px;margin-top:12px;background:var(--warn-bg)}
+  .note h3{margin:0 0 4px;font-size:12px;letter-spacing:.5px;text-transform:uppercase;color:var(--warn)}
+  .note ul{margin:0;padding-left:20px}
+  .kv{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:9px 0;
+    border-top:1px solid var(--line)}
+  .kv:first-of-type{border-top:0}
+  .kv .k{min-width:0}
+  .kv .kx{display:block;color:var(--muted);font-size:12px;margin-top:2px;max-width:62ch}
+  .kv .v{font-weight:600;text-align:right;display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+    justify-content:flex-end;min-width:0;overflow-wrap:anywhere}
+  .st{font-size:10.5px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;padding:1px 8px;border-radius:999px}
+  .st.ok{background:var(--good-bg);color:var(--good)}
+  .st.warn{background:var(--warn-bg);color:var(--warn)}
+  .st.bad{background:var(--bad-bg);color:var(--bad)}
+  .v.ok{color:var(--good)} .v.warn{color:var(--warn)} .v.bad{color:var(--bad)}
+  .tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:560px}
+  th{background:var(--soft);text-align:left;font-weight:600;font-size:11px;letter-spacing:.4px;
+    text-transform:uppercase;color:var(--muted);padding:8px 10px;white-space:nowrap}
+  td{padding:8px 10px;border-top:1px solid var(--line);white-space:nowrap}
+  footer{margin-top:22px;color:var(--muted);font-size:12px}
+  footer a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div class="brand"><span class="mark" aria-hidden="true"></span>
+      <div><h1>WHfB Device Report Viewer</h1><p>Reads the JSON from Get-WHFBDeviceReport.ps1</p></div>
+    </div>
+    <span class="pill">Runs offline</span>
+  </header>
+
+  <div class="actions">
+    <button type="button" class="btn main" id="bOpen">Open a report file</button>
+    <button type="button" class="btn" id="bPaste">Paste the JSON instead</button>
+    <input type="file" id="file" accept=".json,.txt" hidden>
+  </div>
+  <div id="pasteBox" hidden>
+    <textarea id="paste" placeholder="Paste the whole JSON file here, then select Read this text." aria-label="Report JSON"></textarea>
+    <button type="button" class="btn" id="bRead">Read this text</button>
+  </div>
+  <div class="status" id="status" role="status"></div>
+
+  <section class="card intro" id="intro">
+    <h2>Read one device's Windows Hello state</h2>
+    <p>This page renders the JSON report written by <code>Get-WHFBDeviceReport.ps1</code>. It is a single HTML file with no
+       libraries, no tracking and no network calls. The file you open is parsed by your own browser and never leaves the machine,
+       so it is safe to use on a report that contains user names.</p>
+    <ol>
+      <li>Run <code>Get-WHFBDeviceReport.ps1</code> in an elevated PowerShell on the device you are troubleshooting.</li>
+      <li>It writes <code>WHFB-Device-&lt;name&gt;-&lt;date&gt;.json</code> beside itself.</li>
+      <li>Select <strong>Open a report file</strong> above and choose that file.</li>
+    </ol>
+    <p>Sharing a report outside your team? Re-run the script with <code>-Anonymise</code>, which masks user names, the device ID,
+       the Hello key ID and certificate thumbprints.</p>
+  </section>
+
+  <div id="report"></div>
+
+  <footer>Part of the <a href="https://github.com/Imran76Awan/Daily-Tasks/tree/main/whfb-device-triage" target="_blank" rel="noopener">whfb-device-triage</a>
+    scripts. Guide: <a href="https://endpointweekly.com/blog/whfb-device-triage-report-offline-viewer.html" target="_blank" rel="noopener">EndpointWeekly</a>.</footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var GLOSS = {
+    'join type': 'How this device is registered. Hello needs a cloud identity, so a workgroup device cannot use it.',
+    'trust model': 'How Hello proves who you are to on-premises systems.',
+    'azureadjoined': 'The device is registered with the cloud directory. Windows Hello cannot work without this.',
+    'domainjoined': 'The device is also joined to an on-premises domain. Normal in a hybrid setup.',
+    'deviceauthstatus': 'Whether the device itself could authenticate at the last check. FAILED here usually means the device record is disabled, deleted, or unreachable.',
+    'deviceid': 'The device record identifier in the directory. Quote it when raising a case.',
+    'device certificate': 'The certificate that proves this device is registered. Expired or missing breaks sign-in and token renewal.',
+    'device cert thumbprint': 'The certificate fingerprint, for matching against the directory record.',
+    'ngcset': 'Whether Hello is set up for the signed-in user. The most important line here: NO means Hello is not active, whatever else says.',
+    'ngc containers': 'The protected key store Hello signs in with. Zero containers with NgcSet YES means there is nothing to sign with.',
+    'ngckeyid': 'The identifier of this user Hello key.',
+    'keyprovider': 'Whether the key lives in the security chip or in software. Platform means hardware-backed.',
+    'tpmprotected': 'The Hello key is held in the security chip rather than in software. This is what makes Hello stronger than a password.',
+    'keysigntest': 'Windows own test that the Hello key can still sign. A failure here means the key is present but unusable.',
+    'azureadprt': 'The single sign-on token. NO means apps will keep asking the user to sign in.',
+    'azureadprtupdatetime': 'When the token last renewed. A date several days old means renewal is not working.',
+    'azureadprtexpirytime': 'When the token runs out if it does not renew first.',
+    'onpremtgt': 'A ticket for on-premises resources such as file shares. Needs a reachable domain controller.',
+    'cloudtgt': 'Cloud Kerberos trust is working, so Hello can reach on-premises systems without a certificate.',
+    'present': 'A security chip (TPM) is fitted.',
+    'ready': 'The security chip is on and usable. Hello cannot use hardware keys without this.',
+    'enabled': 'The security chip is switched on in firmware.',
+    'owned': 'Windows has taken ownership of the chip. Normal.',
+    'policy: enabled': 'Whether policy tells this device to offer Hello. 0 explicitly disables it.',
+    'policy: requiresecuritydevice': 'Whether policy refuses to create a Hello key in software.',
+    'policy: usecloudtrust': 'Whether Cloud Kerberos trust is turned on.',
+    'convenience pin': 'A plain PIN, which is NOT Windows Hello for Business. If this is on, people can believe they are using Hello when they are not.',
+    'minimum pin length': 'The shortest PIN the policy allows.',
+    'ngcsvc': 'The service that runs Hello. It must be running.',
+    'ngcctnrsvc': 'The service guarding the Hello key store. Trigger-started, so Stopped is normal.',
+    'keyiso': 'Keeps keys isolated from the rest of Windows. If it is stopped, Hello cannot sign anything.',
+    'wbiosrvc': 'The fingerprint and face service. Trigger-started, so Stopped is normal.',
+    'tokenbroker': 'Hands tokens to apps. Trouble here shows up as repeated password prompts.',
+    'helloforbusiness': 'Errors Windows Hello logged in the window.',
+    'biometrics': 'Errors the fingerprint or face reader logged in the window.',
+    'device registration': 'Errors the registration component logged in the window.',
+    '"logon" auditing': 'Whether Windows records sign-ins. Off means the usage figures under-report.',
+    '"other logon/logoff events"': 'Whether Windows records unlocks. Off hides PIN and password unlocks.'
+  };
+  var STATE_WORD = { ok: 'OK', warn: 'Check', bad: 'Problem' };
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function gloss(k) {
+    var s = String(k || '').toLowerCase(), key;
+    for (key in GLOSS) { if (Object.prototype.hasOwnProperty.call(GLOSS, key) && s.indexOf(key) === 0) return GLOSS[key]; }
+    return '';
+  }
+  function list(items, title) {
+    if (!items || !items.length) return '';
+    return '<div class="note"><h3>' + esc(title) + '</h3><ul>' +
+      items.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></div>';
+  }
+
+  function render(o) {
+    var el = $('report');
+    if (!o) { el.innerHTML = ''; $('intro').hidden = false; return; }
+    $('intro').hidden = true;
+    var h = '';
+    h += '<div class="card"><div class="hero"><div class="name">' + esc(o.computer || 'This device') + '</div>' +
+      '<div class="sub">Collected ' + esc(o.generated || 'date not recorded') +
+      '. Every value below was read from the device itself.</div></div></div>';
+
+    if (o.verdict) {
+      var ok = !!o.verdict.healthy;
+      h += '<div class="verdict ' + (ok ? 'good' : 'bad') + '"><div class="head"><span class="badge">' +
+        (ok ? 'Looks healthy' : 'Needs attention') + '</span><b>' + esc(o.verdict.text || '') + '</b></div>';
+      if (o.verdict.flags && o.verdict.flags.length) {
+        h += '<ul>' + o.verdict.flags.map(function (f) { return '<li>' + esc(f) + '</li>'; }).join('') + '</ul>';
+      }
+      h += '</div>';
+    }
+    h += list(o.advice, 'Worth knowing (not blocking)');
+    h += list(o.degraded, 'Could not be read');
+
+    (o.sections || []).forEach(function (s) {
+      h += '<div class="card"><h2>' + esc(s.title) + '</h2>';
+      if (s.type === 'kv') {
+        (s.rows || []).forEach(function (r) {
+          var gx = gloss(r.k), st = (r.state && STATE_WORD[r.state]) ? r.state : '';
+          h += '<div class="kv"><span class="k">' + esc(r.k) +
+            (gx ? '<span class="kx">' + esc(gx) + '</span>' : '') + '</span>' +
+            '<span class="v ' + st + '">' + esc(r.v) +
+            (st ? '<span class="st ' + st + '">' + STATE_WORD[st] + '</span>' : '') + '</span></div>';
+        });
+      } else if (s.type === 'table') {
+        var heads = s.headers || [];
+        h += '<div class="tw"><table><thead><tr>' +
+          heads.map(function (x) { return '<th>' + esc(x) + '</th>'; }).join('') + '</tr></thead><tbody>';
+        if (!(s.rows || []).length) {
+          h += '<tr><td colspan="' + heads.length + '" style="text-align:center;padding:14px">Nothing recorded.</td></tr>';
+        }
+        (s.rows || []).forEach(function (row) {
+          h += '<tr>' + row.map(function (c) { return '<td>' + esc(c) + '</td>'; }).join('') + '</tr>';
+        });
+        h += '</tbody></table></div>';
+      }
+      h += '</div>';
+    });
+    el.innerHTML = h;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function ingest(text) {
+    var raw = String(text), o;
+    if (raw.charCodeAt(0) === 65279) raw = raw.slice(1);
+    try { o = JSON.parse(raw); }
+    catch (e) {
+      $('status').textContent = 'That file could not be read as JSON. Open the whole report file, not a fragment of it.';
+      return;
+    }
+    if (!o || !o.sections) {
+      $('status').textContent = 'That is valid JSON but not a device report: it has no sections.';
+      return;
+    }
+    $('status').textContent = 'Showing ' + (o.computer || 'this device') + (o.generated ? ', collected ' + o.generated : '');
+    render(o);
+  }
+
+  $('bOpen').addEventListener('click', function () { $('file').click(); });
+  $('file').addEventListener('change', function (e) {
+    var f = e.target.files && e.target.files[0];
+    if (!f) return;
+    var r = new FileReader();
+    r.onload = function () { ingest(r.result); };
+    r.readAsText(f);
+  });
+  $('bPaste').addEventListener('click', function () {
+    var b = $('pasteBox');
+    b.hidden = !b.hidden;
+    if (!b.hidden) $('paste').focus();
+  });
+  $('bRead').addEventListener('click', function () {
+    if ($('paste').value.trim()) ingest($('paste').value);
+    else $('status').textContent = 'Paste the report JSON into the box first.';
+  });
+
+  render(null);
+})();
+</script>
+</body>
+</html>
