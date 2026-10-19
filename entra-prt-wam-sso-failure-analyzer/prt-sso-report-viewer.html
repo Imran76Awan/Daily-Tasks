@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PRT SSO Report Viewer</title>
+<meta name="description" content="Offline viewer for the JSON report written by Detect-PrtSsoHealth.ps1. Everything is read in your own browser.">
+<style>
+  :root{
+    --bg:#f1f4f8; --panel:#fff; --ink:#0e1b27; --muted:#566676; --line:#d9e1e9; --soft:#e8eef4;
+    --accent:#0b6b88; --good:#14703c; --good-bg:#e2f3e8; --warn:#9a4a05; --warn-bg:#fcefd6;
+    --bad:#b3261e; --bad-bg:#fce6e4;
+    --mono:ui-monospace,"Cascadia Code",Consolas,"Courier New",monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0d151d; --panel:#141f2a; --ink:#e6edf4; --muted:#9bacbc; --line:#243342; --soft:#1b2936;
+      --accent:#4cc2e4; --good:#5fd08b; --good-bg:#123322; --warn:#f0b35b; --warn-bg:#3a2a10;
+      --bad:#ff8a80; --bad-bg:#3b1816; color-scheme:dark;
+    }
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  [hidden]{display:none!important}
+  body{background:var(--bg);color:var(--ink);margin:0;font-size:14px;line-height:1.55;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  h1,h2,h3,p{margin:0}
+  button{font:inherit;color:inherit}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .page{max-width:960px;margin:0 auto;padding:22px 16px 56px}
+  header{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between;margin-bottom:16px}
+  .brand{display:flex;gap:12px;align-items:center;min-width:0}
+  .mark{width:30px;height:30px;border-radius:8px;background:var(--accent);position:relative;flex:none}
+  .mark::after{content:"";position:absolute;inset:8px;border:2.5px solid var(--panel);border-radius:3px}
+  h1{font-size:19px;font-weight:600}
+  header p{font-size:12.5px;color:var(--muted)}
+  .pill{font-size:11px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--good);
+    background:var(--good-bg);padding:3px 10px;border-radius:999px}
+  .actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:6px}
+  .btn{border:1.5px solid var(--accent);background:var(--panel);color:var(--accent);border-radius:999px;
+    padding:9px 18px;font-weight:600;cursor:pointer}
+  .btn:hover{background:var(--soft)}
+  .btn.main{background:var(--accent);color:var(--panel)}
+  .status{font-size:12.5px;color:var(--muted);min-height:20px;margin:8px 2px 12px}
+  textarea{width:100%;min-height:120px;margin:4px 0 8px;padding:10px 12px;font-family:var(--mono);
+    font-size:12px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:10px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin-top:14px}
+  .card h2{font-size:16px;font-weight:600;margin-bottom:8px}
+  .card h3{font-size:12px;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin:16px 0 6px}
+  .intro p{color:var(--muted);margin-bottom:12px;max-width:70ch}
+  .intro ol{margin:0 0 12px;padding-left:20px;max-width:70ch}
+  code{font-family:var(--mono);font-size:12px;background:var(--soft);border-radius:5px;padding:1px 6px;overflow-wrap:anywhere}
+  .verdict{border-radius:14px;padding:14px 18px;margin-top:14px}
+  .verdict.good{background:var(--good-bg)} .verdict.bad{background:var(--bad-bg)} .verdict.warn{background:var(--warn-bg)}
+  .verdict .head{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:17px;font-weight:600}
+  .verdict p{margin-top:6px;max-width:75ch}
+  .badge{font-size:11px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;padding:2px 10px;border-radius:999px;background:var(--panel)}
+  .kv{display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-top:1px solid var(--line)}
+  .kv:first-child{border-top:0}
+  .kv .k{color:var(--muted);min-width:0}
+  .kv .v{font-weight:600;text-align:right;min-width:0;overflow-wrap:anywhere;font-family:var(--mono);font-size:12.5px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:4px 28px}
+  .st{font-size:10.5px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;padding:1px 8px;border-radius:999px;white-space:nowrap}
+  .st.Fail,.st.Failed{background:var(--bad-bg);color:var(--bad)}
+  .st.Warn,.st.Unterminated{background:var(--warn-bg);color:var(--warn)}
+  .st.Info{background:var(--soft);color:var(--muted)}
+  .st.Succeeded,.st.ok{background:var(--good-bg);color:var(--good)}
+  .finding{border-top:1px solid var(--line);padding:10px 0}
+  .finding .t{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;font-weight:600}
+  .finding .e{font-family:var(--mono);font-size:12px;color:var(--muted);overflow-wrap:anywhere;margin-top:4px}
+  .finding .m{font-size:12px;color:var(--muted);margin-top:2px}
+  .tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px;margin-top:6px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:600px}
+  th{background:var(--soft);text-align:left;font-weight:600;font-size:11px;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);padding:7px 10px}
+  td{padding:7px 10px;border-top:1px solid var(--line);vertical-align:top}
+  td.mono{font-family:var(--mono);font-size:11.5px;overflow-wrap:anywhere}
+  details{border-top:1px solid var(--line);padding:8px 0}
+  summary{cursor:pointer;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .note{border-radius:12px;padding:12px 16px;margin-top:12px;background:var(--warn-bg)}
+  .note ul{margin:4px 0 0;padding-left:20px}
+  .muted{color:var(--muted)}
+  footer{margin-top:22px;color:var(--muted);font-size:12px}
+  footer a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div class="brand"><span class="mark" aria-hidden="true"></span>
+      <div><h1>PRT SSO Report Viewer</h1><p>Reads the JSON from Detect-PrtSsoHealth.ps1</p></div>
+    </div>
+    <span class="pill">Runs offline</span>
+  </header>
+
+  <div class="actions">
+    <button type="button" class="btn main" id="bOpen">Open a report file</button>
+    <button type="button" class="btn" id="bPaste">Paste the JSON instead</button>
+    <input type="file" id="file" accept=".json,.txt" hidden>
+  </div>
+  <div id="pasteBox" hidden>
+    <textarea id="paste" placeholder="Paste the whole JSON file here, then select Read this text." aria-label="Report JSON"></textarea>
+    <button type="button" class="btn" id="bRead">Read this text</button>
+  </div>
+  <div class="status" id="status" role="status"></div>
+
+  <section class="card intro" id="intro">
+    <h2>Why does this user keep getting sign-in prompts?</h2>
+    <p>This page renders the report written by <code>Detect-PrtSsoHealth.ps1</code>: each signed-in user's Primary Refresh Token,
+       the dsregcmd PRT diagnostics, WAM state, UPN and SID checks, and the AAD Analytic 1006&ndash;1007 authentication
+       transactions they correlate with. It is one HTML file with no libraries and no network calls; the file is read by your browser and never leaves the machine.</p>
+    <ol>
+      <li>On the device, the report is at <code>C:\ProgramData\EndpointWeekly\PrtSso\PrtSso-latest.json</code> (written every time the Intune detection runs).</li>
+      <li>Copy it off the device and choose <strong>Open a report file</strong>.</li>
+    </ol>
+    <p>Sharing it outside your team? Run the script with <code>-Anonymise</code> first.</p>
+  </section>
+
+  <div id="report"></div>
+
+  <footer>Part of <a href="https://github.com/Imran76Awan/Daily-Tasks/tree/main/entra-prt-wam-sso-failure-analyzer" target="_blank" rel="noopener">entra-prt-wam-sso-failure-analyzer</a>.</footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+
+  // Every value comes from a device and is rendered as text, never as HTML.
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) {
+      if (k === 'text') n.textContent = attrs[k]; else n.setAttribute(k, attrs[k]);
+    });
+    (kids || []).forEach(function (c) { if (c != null) n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+    return n;
+  }
+  function s(v) { return v === null || v === undefined || v === '' ? '\u2014' : String(v); }
+  function arr(v) { return Array.isArray(v) ? v : (v == null ? [] : [v]); }
+  function kv(k, v) { return el('div', { 'class': 'kv' }, [el('span', { 'class': 'k', text: k }), el('span', { 'class': 'v', text: s(v) })]); }
+  function grid(pairs) { return el('div', { 'class': 'grid' }, pairs.map(function (p) { return kv(p[0], p[1]); })); }
+  function badge(text, cls) { return el('span', { 'class': 'st ' + (cls || text), text: text }); }
+
+  function finding(f) {
+    var meta = [f.source, f.correlationId ? 'Correlation ID ' + f.correlationId : '', f.transaction ? 'transaction #' + f.transaction : '',
+      arr(f.repair).length ? 'auto-repair: ' + arr(f.repair).join(', ') : 'manual'].filter(Boolean).join(' \u00b7 ');
+    return el('div', { 'class': 'finding' }, [
+      el('div', { 'class': 't' }, [badge(f.severity), el('span', { text: f.categoryName + ': ' + f.title })]),
+      el('div', { 'class': 'm', text: meta }),
+      f.evidence ? el('div', { 'class': 'e', text: f.evidence }) : null
+    ]);
+  }
+
+  function diagTable(title, d) {
+    if (!d || d.state !== 'PRESENT') return el('p', { 'class': 'muted', text: title + ': not present' });
+    var keys = ['Previous Prt Attempt', 'Attempt Status', 'User Identity', 'Credential Type', 'Correlation ID', 'Endpoint URI',
+      'HTTP Method', 'HTTP Error', 'HTTP status', 'Server Error Code', 'Server Error Description'];
+    return el('div', null, [el('h3', { text: title }), grid(keys.map(function (k) { return [k, d[k]]; }))]);
+  }
+
+  function render(r) {
+    var out = $('report');
+    out.textContent = '';
+    if (!r || r.schema !== 'endpointweekly.prt-sso/1') throw new Error('This is not a Detect-PrtSsoHealth.ps1 report.');
+    $('intro').hidden = true;
+    var v = r.verdict || {};
+    var cls = v.status === 'Unhealthy' ? 'bad' : (v.status === 'Warning' ? 'warn' : 'good');
+    out.appendChild(el('div', { 'class': 'verdict ' + cls }, [
+      el('div', { 'class': 'head' }, [el('span', { 'class': 'badge', text: v.status }), el('span', { text: v.primaryName || 'No PRT, WAM or SSO fault found' })]),
+      v.guidance ? el('p', { text: v.guidance }) : null,
+      el('p', { 'class': 'muted', text: (r.device ? r.device.computer + ' \u00b7 ' : '') + 'generated ' + r.generatedUtc + ' as ' + r.runAs +
+        ' \u00b7 window ' + r.hoursBack + 'h' + (r.anonymised ? ' \u00b7 anonymised' : '') })
+    ]));
+
+    if (arr(r.gaps).length) {
+      out.appendChild(el('div', { 'class': 'note' }, [el('strong', { text: 'Could not read everything' }),
+        el('ul', null, arr(r.gaps).map(function (g) { return el('li', { text: g }); }))]));
+    }
+
+    var d = r.device || {};
+    var sids = d.sids || {};
+    var dev = el('section', { 'class': 'card' }, [el('h2', { text: 'Device' }), grid([
+      ['Join type', d.joinType], ['Tenant', d.tenantName], ['DeviceId', d.deviceId], ['DeviceAuthStatus', d.deviceAuthStatus],
+      ['Device certificate expiry', d.deviceCertExpiry], ['TpmProtected', d.tpmProtected],
+      ['Domain', sids.domain], ['Domain SID', sids.domainSid], ['Local account SID', sids.localSid]])]);
+    var svc = r.services || {};
+    dev.appendChild(el('h3', { text: 'Services' }));
+    dev.appendChild(grid(Object.keys(svc).map(function (k) { return [k, svc[k].status + ' / ' + svc[k].startMode]; })));
+    var net = r.network || {};
+    dev.appendChild(el('h3', { text: 'Network (SYSTEM context)' }));
+    dev.appendChild(kv('WinHTTP proxy', net.winHttpProxy && !net.winHttpProxy.direct ? net.winHttpProxy.server : 'direct'));
+    if (arr(net.tlsProbes).length) {
+      dev.appendChild(el('div', { 'class': 'tw' }, [el('table', null, [
+        el('thead', null, [el('tr', null, ['Endpoint', 'TLS', 'Issuer', 'Root', 'Result'].map(function (h) { return el('th', { text: h }); }))]),
+        el('tbody', null, arr(net.tlsProbes).map(function (p) {
+          var res = p.intercepted ? badge('Intercepted', 'Fail') : (p.tls ? badge('ok') : badge('Failed'));
+          return el('tr', null, [el('td', { 'class': 'mono', text: p.host }), el('td', { text: p.tls ? (p.viaProxy ? 'via proxy' : 'direct') : 'no' }),
+            el('td', { 'class': 'mono', text: s(p.issuer || p.error) }), el('td', { 'class': 'mono', text: s(p.root) }), el('td', null, [res])]);
+        }))])]));
+    }
+    var al = r.analyticLog || {};
+    dev.appendChild(el('h3', { text: 'AAD Analytic channel' }));
+    dev.appendChild(grid([['Enabled', al.enabled + (al.enabledByThisRun ? ' (enabled by this run)' : '')], ['Events read', al.events], ['Transactions', arr(r.transactions).length]]));
+    if (arr(r.deviceFindings).length) {
+      dev.appendChild(el('h3', { text: 'Device findings' }));
+      arr(r.deviceFindings).forEach(function (f) { dev.appendChild(finding(f)); });
+    }
+    out.appendChild(dev);
+
+    arr(r.users).forEach(function (u) {
+      var p = u.prt || {}, w = u.wam || {};
+      var card = el('section', { 'class': 'card' }, [
+        el('h2', { text: u.account + (u.primaryCategory ? '  \u2014  ' + ((r.categoryCatalog || {})[u.primaryCategory] || {}).name : '') }),
+        grid([['User SID', u.sid], ['SID type', u.sidKind], ['SID domain portion', u.sidDomain], ['Session', u.sessionId],
+          ['whoami /upn', u.whoamiUpn], ['Current Windows UPN (CloudAP)', u.windowsUpn]]),
+        el('h3', { text: 'Primary Refresh Token' }),
+        grid([['AzureAdPrt', p.AzureAdPrt], ['AzureAdPrtUpdateTime', p.AzureAdPrtUpdateTime], ['AzureAdPrtExpiryTime', p.AzureAdPrtExpiryTime],
+          ['Age (hours)', p.ageHours], ['EnterprisePrt', p.EnterprisePrt], ['OnPremTgt / CloudTgt', s(p.OnPremTgt) + ' / ' + s(p.CloudTgt)]]),
+        diagTable('AcquirePrtDiagnostics', u.acquirePrtDiagnostics),
+        diagTable('RefreshPrtDiagnostics', u.refreshPrtDiagnostics),
+        el('h3', { text: 'Web Account Manager' }),
+        grid([['WamDefaultSet', w.WamDefaultSet], ['WamDefaultAuthority', w.WamDefaultAuthority], ['WamDefaultId', w.WamDefaultId],
+          ['AAD.BrokerPlugin', w.brokerPlugin ? (w.brokerPlugin.present ? w.brokerPlugin.version + ' ' + w.brokerPlugin.status : 'not registered') : null],
+          ['Office identities', arr(w.officeIdentities).map(function (o) { return o.email; }).join(', ')], ['NgcSet', u.NgcSet]])
+      ]);
+      card.appendChild(el('h3', { text: 'Findings' }));
+      if (!arr(u.findings).length) card.appendChild(el('p', { 'class': 'muted', text: 'None for this user.' }));
+      arr(u.findings).forEach(function (f) { card.appendChild(finding(f)); });
+      out.appendChild(card);
+    });
+    if (!arr(r.users).length) out.appendChild(el('section', { 'class': 'card' }, [el('h2', { text: 'No signed-in user' }),
+      el('p', { 'class': 'muted', text: 'PRT state is per user. Nobody was signed in when this ran, so only device-level checks are shown.' })]));
+
+    var txCard = el('section', { 'class': 'card' }, [el('h2', { text: 'Authentication transactions (AAD Analytic 1006 \u2192 1007)' })]);
+    if (!arr(r.transactions).length) txCard.appendChild(el('p', { 'class': 'muted', text: 'None in the window. If the Analytic channel was only just enabled, they appear from the next run.' }));
+    arr(r.transactions).slice().reverse().forEach(function (t) {
+      var det = el('details', null, [el('summary', null, [badge(t.outcome), el('strong', { text: '#' + t.index }),
+        el('span', { text: t.start + '  (' + t.durationMs + ' ms, ' + t.analyticEvents + ' analytic + ' + t.operationalEvents + ' operational)' }),
+        arr(t.categories).length ? el('span', { 'class': 'muted', text: arr(t.categories).join(', ') }) : null])]);
+      det.appendChild(grid([['Correlation IDs', arr(t.correlationIds).join(', ')], ['Error codes', arr(t.errorCodes).join(', ')],
+        ['User SIDs', arr(t.userSids).join(', ')], ['UPNs', arr(t.upns).join(', ')]]));
+      if (t.evidence) det.appendChild(el('div', { 'class': 'finding' }, [el('div', { 'class': 'e', text: t.evidence })]));
+      det.appendChild(el('div', { 'class': 'tw' }, [el('table', null, [
+        el('thead', null, [el('tr', null, ['Time', 'Log', 'ID', 'Lvl', 'Text'].map(function (h) { return el('th', { text: h }); }))]),
+        el('tbody', null, arr(t.timeline).map(function (e) {
+          return el('tr', null, [el('td', { 'class': 'mono', text: e.time }), el('td', { text: e.log }), el('td', { text: String(e.id) }),
+            el('td', { text: String(e.level) }), el('td', { 'class': 'mono', text: e.text })]);
+        }))])]));
+      txCard.appendChild(det);
+    });
+    out.appendChild(txCard);
+
+    if (arr(r.operationalErrors).length) {
+      out.appendChild(el('section', { 'class': 'card' }, [el('h2', { text: 'AAD Operational errors' }), el('div', { 'class': 'tw' }, [el('table', null, [
+        el('thead', null, [el('tr', null, ['Time', 'ID', 'Codes', 'Text'].map(function (h) { return el('th', { text: h }); }))]),
+        el('tbody', null, arr(r.operationalErrors).slice().reverse().map(function (e) {
+          return el('tr', null, [el('td', { 'class': 'mono', text: e.time }), el('td', { text: String(e.id) }),
+            el('td', { 'class': 'mono', text: arr(e.codes).join(' ') }), el('td', { 'class': 'mono', text: e.text })]);
+        }))])])]));
+    }
+  }
+
+  function load(text, name) {
+    try {
+      render(JSON.parse(text.replace(/^\uFEFF/, '')));
+      $('status').textContent = 'Showing ' + (name || 'pasted report') + '.';
+    } catch (e) {
+      $('status').textContent = 'Could not read that file: ' + e.message;
+    }
+  }
+  $('bOpen').addEventListener('click', function () { $('file').click(); });
+  $('file').addEventListener('change', function () {
+    var f = this.files && this.files[0];
+    if (!f) return;
+    var rd = new FileReader();
+    rd.onload = function () { load(String(rd.result), f.name); };
+    rd.readAsText(f);
+  });
+  $('bPaste').addEventListener('click', function () { $('pasteBox').hidden = !$('pasteBox').hidden; });
+  $('bRead').addEventListener('click', function () { load($('paste').value, ''); });
+  document.addEventListener('dragover', function (e) { e.preventDefault(); });
+  document.addEventListener('drop', function (e) {
+    e.preventDefault();
+    var f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!f) return;
+    var rd = new FileReader();
+    rd.onload = function () { load(String(rd.result), f.name); };
+    rd.readAsText(f);
+  });
+})();
+</script>
+</body>
+</html>
